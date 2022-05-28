@@ -1,6 +1,7 @@
 package socks5
 
 import (
+	"encoding/binary"
 	"io"
 	"net"
 )
@@ -31,6 +32,19 @@ const (
 )
 
 func NewClientRequestMessage(conn io.Reader) (*ClientRequestMessage, error) {
+	// +----+-----+-------+------+----------+----------+
+	// |VER | CMD |  RSV  | ATYP | DST.ADDR | DST.PORT |
+	// +----+-----+-------+------+----------+----------+
+	// | 1  |  1  | X'00' |  1   | Variable |    2     |
+	// +----+-----+-------+------+----------+----------+
+	// VER 版本号，socks5的值为0x05
+	// CMD 0x01表示CONNECT请求
+	// RSV 保留字段，值为0x00
+	// ATYP 目标地址类型，DST.ADDR的数据对应这个字段的类型。
+	//   0x01表示IPv4地址，DST.ADDR为4个字节
+	//   0x03表示域名，DST.ADDR是一个可变长度的域名
+	// DST.ADDR 一个可变长度的值
+	// DST.PORT 目标端口，固定2个字节
 	buf := make([]byte, 4)
 	_, err := io.ReadFull(conn, buf) //get version , cmd , rsv , atyp
 	if err != nil {
@@ -76,10 +90,15 @@ func NewClientRequestMessage(conn io.Reader) (*ClientRequestMessage, error) {
 		message.Address = string(buf[:domainLen])
 	}
 	//read port
-	if _, err := io.ReadFull(conn, buf[:2]); err != nil {
+	// if _, err := io.ReadFull(conn, buf[:2]); err != nil {
+	// 	return nil, err
+	// }
+	// message.Port = (uint16(buf[0]) << 8) + uint16(buf[1])
+	_, err = io.ReadFull(conn, buf[:2])
+	if err != nil {
 		return nil, err
 	}
-	message.Port = (uint16(buf[0]) << 8) + uint16(buf[1])
+	message.Port = binary.BigEndian.Uint16(buf[:2]) //大端法读port ;如prot buf[0]=0x04 buf[1]=0x38,大端法就是0x0438=1080
 	return &message, nil
 }
 

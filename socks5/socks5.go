@@ -1,6 +1,7 @@
 package socks5
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -109,7 +110,20 @@ func request(conn io.ReadWriter) (io.ReadWriteCloser, error) {
 }
 func forword(conn io.ReadWriter, targetConn io.ReadWriteCloser) error {
 	defer targetConn.Close()
-	go io.Copy(targetConn, conn)
-	_, err := io.Copy(conn, targetConn)
-	return err
+	// go io.Copy(targetConn, conn)
+	// _, err := io.Copy(conn, targetConn)
+	// return err
+	//转发
+	ctx, cancel := context.WithCancel(context.Background()) //创建一个context,用来让主循环等待gorutinue结束
+	defer cancel()
+	go func() {
+		_, _ = io.Copy(targetConn, conn) //从用户的浏览器拷贝数据到底层服务器
+		cancel()                         //gorutinue结束
+	}()
+	go func() {
+		_, _ = io.Copy(conn, targetConn) //从底层服务器到用户浏览器
+		cancel()                         //gorutinue结束
+	}()
+	<-ctx.Done() //context结束
+	return nil
 }

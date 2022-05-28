@@ -22,6 +22,16 @@ type ClientAuthMessage struct {
 type Method = byte
 
 func NewClientAuthMessage(conn io.Reader) (*ClientAuthMessage, error) {
+	// +----+----------+----------+
+	// |VER | NMETHODS | METHODS  |
+	// +----+----------+----------+
+	// | 1  |    1     | 1 to 255 |
+	// +----+----------+----------+
+	// VER: 协议版本，socks5为0x05
+	// NMETHODS: 支持认证的方法数量
+	// METHODS: 对应NMETHODS，NMETHODS的值为多少，METHODS就有多少个字节。RFC预定义了一些值的含义，内容如下:
+	// X’00’ NO AUTHENTICATION REQUIRED
+	// X’02’ USERNAME/PASSWORD
 	//read version,nMethods
 	buf := make([]byte, 2)
 	_, err := io.ReadFull(conn, buf)
@@ -35,7 +45,7 @@ func NewClientAuthMessage(conn io.Reader) (*ClientAuthMessage, error) {
 	//read methods
 	nmethods := buf[1]
 	buf = make([]byte, nmethods)
-	_, err = io.ReadFull(conn, buf)
+	_, err = io.ReadFull(conn, buf[:nmethods])
 	if err != nil {
 		return nil, err
 	}
@@ -43,11 +53,18 @@ func NewClientAuthMessage(conn io.Reader) (*ClientAuthMessage, error) {
 	return &ClientAuthMessage{
 		Version:  SOCKS5Version,
 		NMethods: nmethods,
-		Methods:  buf,
+		Methods:  buf[:nmethods],
 	}, nil
 }
 
 func NewServerAuthMessage(conn io.Writer, method Method) error {
+	// +----+--------+
+	// |VER | METHOD |
+	// +----+--------+
+	// | 1  |   1    |
+	// +----+--------+
+
+	//对客户端应答
 	buf := []byte{SOCKS5Version, method}
 	_, err := conn.Write(buf)
 	return err
